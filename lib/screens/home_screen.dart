@@ -4,6 +4,10 @@ import 'login_screen.dart';
 import 'device_list_screen.dart';
 import 'service_request_screen.dart';
 import 'plan_screen.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:ppal/common.dart';
+import 'package:ppal/screens/profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,6 +21,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _userRole;
   bool _isLoggedIn = false;
   bool _isLoading = true;
+  int _notificationCount = 0; // Add this variable
 
   @override
   void initState() {
@@ -28,18 +33,21 @@ class _HomeScreenState extends State<HomeScreen> {
     final isLoggedIn = await AuthService.isLoggedIn();
     String? userName;
     String? userRole;
-    
+
     if (isLoggedIn) {
       // Try to get the user's profile information
       try {
         final userInfo = await AuthService.getUserInfo();
         userName = userInfo['name'] ?? userInfo['email'];
         userRole = userInfo['role'];
+
+        // Fetch notification count if logged in
+        await _fetchNotificationCount();
       } catch (e) {
         print('Error fetching user info: $e');
       }
     }
-    
+
     if (mounted) {
       setState(() {
         _isLoggedIn = isLoggedIn;
@@ -50,6 +58,36 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // Add this method to fetch notification count
+  Future<void> _fetchNotificationCount() async {
+    try {
+      final token = await AuthService.getAuthToken();
+      if (token == null) return;
+
+      final baseUrl = Config.backendUrl;
+      final apiUrl = '$baseUrl/notifications/unread/count/';
+
+      final response = await http.get(
+        Uri.parse(apiUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (mounted) {
+          setState(() {
+            _notificationCount = data['count'] ?? 0;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching notifications: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -57,7 +95,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('PumperPal Home'),
+        title: const Center(
+          child: Text(
+            'PumperPal',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+        ),
         backgroundColor: const Color(0xFF388E3C),
       ),
       body: Container(
@@ -88,7 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
                     return;
                   }
-                  
+
                   if (context.mounted) {
                     Navigator.push(
                       context,
@@ -112,7 +158,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
                     return;
                   }
-                  
+
                   if (context.mounted) {
                     Navigator.push(
                       context,
@@ -136,7 +182,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
                     return;
                   }
-                  
+
                   if (context.mounted) {
                     Navigator.push(
                       context,
@@ -158,103 +204,101 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildAccountCard(BuildContext context) {
     if (_isLoading) {
       // Show loading spinner while checking login status
-      return Card(
-        elevation: 5,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(15),
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFFA5D6A7), Color(0xFF81C784)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(15),
-          ),
-          child: const Center(
-            child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-            ),
+      return _buildCard(
+        context,
+        title: 'Loading...',
+        icon: Icons.hourglass_empty,
+        onTap: () {}, // No action while loading
+        customChild: const Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
           ),
         ),
       );
     }
 
-    if (_isLoggedIn) {
-      return GestureDetector(
-        onTap: () {
-          _showLogoutConfirmDialog(context);
-        },
-        child: Card(
-          elevation: 5,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFA5D6A7), Color(0xFF81C784)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.account_circle, size: 40, color: Colors.white),
-                const SizedBox(height: 8),
-                Text(
-                  'Hello, ${_userName?.split(' ').first ?? 'User'}!',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+    return Stack(
+      children: [
+        _buildCard(
+          context,
+          title: _isLoggedIn ? '' : 'Account', // Changed from 'Login' to 'Account'
+          icon: _isLoggedIn ? Icons.account_circle : Icons.account_circle,
+          onTap: () {
+            // Navigate to the profile screen instead of directly showing login/logout
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const ProfileScreen()),
+            ).then((_) {
+              // Refresh the home screen when returning from profile screen
+              _checkLoginStatus();
+            });
+          },
+          customChild: _isLoggedIn ? Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.account_circle, size: 40, color: Colors.white),
+              const SizedBox(height: 8),
+              Text(
+                'Hello, ${_userName?.split(' ').first ?? 'User'}!',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Role: ${_userRole ?? 'Unknown'}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Role: ${_userRole ?? 'Unknown'}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
                   fontSize: 12,
                   color: Colors.white,
-                  ),
                 ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Account Settings',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white,
-                  ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'View Profile',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.white,
                 ),
-              ],
+              ),
+            ],
+          ) : null,
+        ),
+        // Only show notification badge if there are notifications and user is logged in
+        if (_isLoggedIn && _notificationCount > 0)
+          Positioned(
+            top: 10,
+            right: 10,
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white, width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Text(
+                _notificationCount > 99 ? '99+' : _notificationCount.toString(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
             ),
           ),
-        ),
-      );
-    } else {
-      return _buildCard(
-        context,
-        title: 'Login',
-        icon: Icons.login,
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const LoginScreen(),
-            ),
-          ).then((_) {
-            // Refresh the login status when returning from the login screen
-            _checkLoginStatus();
-          });
-        },
-      );
-    }
+      ],
+    );
   }
 
   void _showLoginRequiredDialog(BuildContext context, String action) {
@@ -331,7 +375,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildCard(BuildContext context,
       {required String title,
       required IconData icon,
-      required VoidCallback onTap}) {
+      required VoidCallback onTap,
+      Widget? customChild}) {
     return GestureDetector(
       onTap: onTap,
       child: Card(
@@ -348,7 +393,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             borderRadius: BorderRadius.circular(15),
           ),
-          child: Column(
+          child: customChild ?? Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, size: 40, color: Colors.white),

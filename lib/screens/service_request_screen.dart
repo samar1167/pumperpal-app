@@ -94,6 +94,24 @@ class _ServiceRequestScreenState extends State<ServiceRequestScreen> {
     ).then((_) => _fetchServiceRequests()); // Refresh after returning
   }
 
+  void _navigateToServiceRequestDetails(Map<String, dynamic> request) async {
+    // Navigate to the details screen and wait for the result
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ServiceRequestDetailsScreen(
+          serviceRequestId: request['id'].toString(),
+          serviceRequest: request,
+        ),
+      ),
+    );
+    
+    // If the result is true, refresh the service requests list
+    if (result == true) {
+      _fetchServiceRequests();
+    }
+  }
+
   String _formatDateTime(String? dateTimeStr) {
     if (dateTimeStr == null) return 'N/A';
     
@@ -130,9 +148,10 @@ class _ServiceRequestScreenState extends State<ServiceRequestScreen> {
       appBar: AppBar(
         title: const Text(
           'Service Requests',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: Colors.white), 
         ),
         backgroundColor: const Color(0xFF388E3C),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -144,7 +163,7 @@ class _ServiceRequestScreenState extends State<ServiceRequestScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: _navigateToNewRequestForm,
         backgroundColor: const Color(0xFF388E3C),
-        child: const Icon(Icons.add),
+        child: const Icon(Icons.add, color: Colors.white), // Added explicit color
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -204,7 +223,10 @@ class _ServiceRequestScreenState extends State<ServiceRequestScreen> {
             ElevatedButton.icon(
               onPressed: _navigateToNewRequestForm,
               icon: const Icon(Icons.add),
-              label: const Text('Create New Request'),
+                label: const Text(
+                'Create New Request',
+                style: TextStyle(color: Colors.white),
+                ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF388E3C),
               ),
@@ -337,17 +359,7 @@ class _ServiceRequestScreenState extends State<ServiceRequestScreen> {
                       const SizedBox(height: 16),
                       Center(
                         child: ElevatedButton(
-                          onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                            builder: (context) => ServiceRequestDetailsScreen(
-                              serviceRequestId: request['id'].toString(),
-                              serviceRequest: request,
-                            ),
-                            ),
-                          );
-                          },
+                          onPressed: () => _navigateToServiceRequestDetails(request),
                           style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF388E3C),
                           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
@@ -407,7 +419,7 @@ class _NewServiceRequestScreenState extends State<NewServiceRequestScreen> {
     });
 
     try {
-      final token = await AuthService.getAuthToken();
+      final token = await AuthService.getAuthToken(); 
       if (token == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please log in to submit a service request')),
@@ -476,7 +488,7 @@ class _NewServiceRequestScreenState extends State<NewServiceRequestScreen> {
     );
   }
 
-  Future<List<String>> _fetchAddresses() async {
+  Future<List<Map<String, dynamic>>> _fetchAddresses() async {
     try {
       final token = await AuthService.getAuthToken();
       if (token == null) {
@@ -507,19 +519,11 @@ class _NewServiceRequestScreenState extends State<NewServiceRequestScreen> {
           addressesList = responseData;
         }
         
-        return addressesList.map((addr) {
-          if (addr is Map<String, dynamic>) {
-            // Format the address as a string
-            final id = addr['id'] ?? '';
-            final address = addr['address'] ?? '';
-            final city = addr['city'] ?? '';
-            final state = addr['state'] ?? '';
-            final zipcode = addr['zipcode'] ?? '';
-            
-            return '$id, $address, $city, $state $zipcode';
-          }
-          return addr.toString();
-        }).toList();
+        // Convert each address to a Map<String, dynamic>
+        return addressesList
+          .where((addr) => addr is Map<String, dynamic>)
+          .map<Map<String, dynamic>>((addr) => addr as Map<String, dynamic>)
+          .toList();
       } else {
         throw Exception('Failed to load addresses: ${response.reasonPhrase}');
       }
@@ -552,6 +556,7 @@ class _NewServiceRequestScreenState extends State<NewServiceRequestScreen> {
           style: TextStyle(color: Colors.white),
         ),
         backgroundColor: const Color(0xFF388E3C),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -649,7 +654,7 @@ class _NewServiceRequestScreenState extends State<NewServiceRequestScreen> {
                       const SizedBox(height: 4),
 
                       // Use FutureBuilder without wrapping it in a SizedBox with dynamic height
-                      FutureBuilder<List<String>>(
+                      FutureBuilder<List<Map<String, dynamic>>>(
                         future: _fetchAddresses(),
                         builder: (context, snapshot) {
                           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -701,15 +706,20 @@ class _NewServiceRequestScreenState extends State<NewServiceRequestScreen> {
                                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                   ),
                                   value: _addressController.text.isEmpty ? null : _addressController.text,
-                                  hint: const Text('Select an address'),
-                                  items: snapshot.data!.map((address) => DropdownMenuItem<String>(
-                                    value: address,
-                                    child: Text(
-                                      address,
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
-                                    ),
-                                  )).toList(),
+                                    hint: const Text('Select an address'),
+                                    items: snapshot.data!.map((address) {
+                                    final id = address['id']?.toString() ?? '';
+                                    final formattedAddress = '${address['address'] ?? ''}, ${address['city'] ?? ''}, ${address['state'] ?? ''} ${address['zipcode'] ?? ''}';
+                                    
+                                    return DropdownMenuItem<String>(
+                                      value: id,
+                                      child: Text(
+                                        formattedAddress,
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                      ),
+                                    );
+                                  }).toList(),
                                   onChanged: (value) {
                                     setState(() {
                                       _addressController.text = value ?? '';

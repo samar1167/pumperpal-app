@@ -37,6 +37,7 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
   final TextEditingController _noteController = TextEditingController();
   bool _isSubmittingNote = false;
   bool _isUploadingAttachment = false;
+  bool _isSubmittingCancel = false;
   String? _userRole;
   bool _isEditing = false;
   final TextEditingController _descriptionController = TextEditingController();
@@ -682,9 +683,9 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF388E3C),
                               ),
-                              child: const Text(
+                                child: const Text(
                                 'Save Changes',
-                                style: TextStyle(color: Colors.white),
+                                style: TextStyle(color: Colors.black),
                               ),
                             ),
                           ],
@@ -869,7 +870,10 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF388E3C),
                             ),
-                            child: const Text('Save Changes'),
+                            child: const Text(
+                                'Save Changes',
+                                style: TextStyle(color: Colors.white),
+                            ),
                           ),
                         ],
                       ),
@@ -1263,13 +1267,14 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
 
     // Don't allow editing if the status is Cancelled or Completed
     final status = _serviceRequestDetails!['status'];
-    if (status != null &&
-        ['cancelled', 'completed'].contains(status.toLowerCase())) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Cancelled or completed requests cannot be edited')),
-      );
-      return;
+    if (status != null) {
+      if (['cancelled', 'completed'].contains(status.toLowerCase())) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Cancelled or completed requests cannot be edited')),
+        );
+        return;
+      }
     }
 
     _descriptionController.text = _serviceRequestDetails!['description'] ?? '';
@@ -1312,8 +1317,7 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
       }
 
       final baseUrl = Config.backendUrl;
-      final apiUrl = '$baseUrl/service_request/${widget
-          .serviceRequestId}/edit/';
+      final apiUrl = '$baseUrl/service_request/${widget.serviceRequestId}/edit/';
 
       Map<String, dynamic> updateData = {};
 
@@ -1371,18 +1375,20 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
       if (response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
           _selectedStatus == 'Cancelled'
-              ? const SnackBar(
-              content: Text('Service request cancelled successfully'))
-              : const SnackBar(
-              content: Text('Service request updated successfully')),
+              ? const SnackBar(content: Text('Service request cancelled successfully'))
+              : const SnackBar(content: Text('Service request updated successfully')),
         );
 
-        // Refresh the data
+        // Refresh data
         await _fetchServiceRequestDetails();
 
         setState(() {
           _isEditing = false;
         });
+
+        // Return true to the calling screen to trigger a refresh
+        Navigator.of(context).pop(true);
+        return;
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(
@@ -1408,98 +1414,136 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
     if (status != null &&
         ['cancelled', 'completed'].contains(status.toLowerCase())) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(
-            'This request has already been cancelled or completed')),
+        const SnackBar(content: Text('This request has already been cancelled or completed')),
       );
       return;
     }
 
-    _noteController
-        .clear(); // Reuse the note controller for the cancellation reason
+    _noteController.clear(); // Reuse the note controller for the cancellation reason
 
     showDialog(
       context: context,
-      builder: (context) =>
-          StatefulBuilder(
-            builder: (context, setState) {
-              bool isSubmitting = false;
-
-              return AlertDialog(
-                title: const Text('Cancel Service Request'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Are you sure you want to cancel this service request?',
-                      style: TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('Please provide a reason for cancellation:'),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _noteController,
-                      maxLines: 3,
-                      decoration: const InputDecoration(
-                        hintText: 'Enter cancellation reason...',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    if (isSubmitting)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 16.0),
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                  ],
+      barrierDismissible: false, // Prevent dismissing by tapping outside
+      builder: (context) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          return AlertDialog(
+            title: const Text('Cancel Service Request'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Are you sure you want to cancel this service request?',
+                  style: TextStyle(fontWeight: FontWeight.w500),
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: isSubmitting ? null : () =>
-                        Navigator.pop(context),
-                    child: const Text('Back'),
+                const SizedBox(height: 16),
+                const Text('Please provide a reason for cancellation:'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _noteController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    hintText: 'Enter cancellation reason...',
+                    border: OutlineInputBorder(),
                   ),
-                  ElevatedButton(
-                    onPressed: isSubmitting
-                        ? null
-                        : () async {
-                      if (_noteController.text
-                          .trim()
-                          .isEmpty) {
+                ),
+                if (_isSubmittingCancel) // Added flag for cancel operation
+                  const Padding(
+                    padding: EdgeInsets.only(top: 16.0),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: 8),
+                          Text(
+                            'Processing cancellation...',
+                            style: TextStyle(fontStyle: FontStyle.italic),
+                          )
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: _isSubmittingCancel ? null : () => Navigator.pop(dialogContext),
+                child: const Text('Back'),
+              ),
+              ElevatedButton(
+                onPressed: _isSubmittingCancel
+                    ? null
+                    : () async {
+                      if (_noteController.text.trim().isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text(
-                              'Please provide a reason for cancellation')),
+                          const SnackBar(content: Text('Please provide a reason for cancellation')),
                         );
                         return;
                       }
 
+                      // Update the dialog UI to show loading state
+                      setDialogState(() {
+                        _isSubmittingCancel = true;
+                      });
+                      
+                      // Also update the parent state to reflect changes in case dialog is dismissed
                       setState(() {
-                        isSubmitting = true;
+                        _isSubmittingCancel = true;
                       });
 
-                      // Set status to cancelled
-                      _selectedStatus = 'Cancelled';
+                      try {
+                        // Set status to cancelled
+                        _selectedStatus = 'Cancelled';
 
-                      // Save the update to change status
-                      await _saveUpdates();
+                        // Save the update to change status
+                        await _saveUpdates();
 
-                      // Add the cancellation reason as a note
-                      final noteSuccess = await _submitServiceNote(
-                          "Cancellation reason: ${_noteController.text}"
-                      );
+                        // Add the cancellation reason as a note
+                        await _submitServiceNote("Cancellation reason: ${_noteController.text}");
 
-                      if (context.mounted) {
-                        Navigator.pop(context);
+                        // Update success message
+                        if (context.mounted) { 
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Service request cancelled successfully'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        // Show error if something went wrong
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error cancelling request: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      } finally {
+                        // Reset the submitting state
+                        setState(() {
+                          _isSubmittingCancel = false;
+                        });
+                        
+                        // Close the dialog if it's still open
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext);
+                        }
                       }
                     },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                    ),
-                    child: const Text('Cancel Request'),
-                  ),
-                ],
-              );
-            },
-          ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                ),
+                child: const Text(
+                  'Cancel Request',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -1563,6 +1607,9 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
             backgroundColor: Colors.green,
           ),
         );
+        
+        // Also notify the parent screen to refresh
+        Navigator.of(context).pop(true);
       }
     });
   }

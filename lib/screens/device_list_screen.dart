@@ -107,18 +107,17 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Device(s)'),
+        title: const Text(
+          'My Device(s)',
+          style: TextStyle(color: Colors.white),
+        ),
         backgroundColor: const Color(0xFF388E3C),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _fetchDevices,
             tooltip: 'Refresh',
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => _handleLogout(context),
-            tooltip: 'Logout',
           ),
         ],
       ),

@@ -403,6 +403,7 @@ class _PlanScreenState extends State<PlanScreen> {
           style: TextStyle(color: Colors.white),
         ),
         backgroundColor: const Color(0xFF388E3C),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Container(
         decoration: const BoxDecoration(

@@ -166,8 +166,12 @@ class _DeviceDetailsScreenState extends State<DeviceDetailsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.deviceName),
+        title: Text(
+          widget.deviceName,
+          style: const TextStyle(color: Colors.white),
+        ),
         backgroundColor: const Color(0xFF388E3C),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
