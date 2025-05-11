@@ -543,8 +543,7 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
                       ),
 
                       // Only show action buttons if not cancelled or completed
-                      if (!['cancelled', 'completed'].contains(
-                          status.toLowerCase()))
+                      if (!['cancelled', 'completed'].contains(status.toLowerCase()))
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -558,16 +557,14 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
                                 status.toLowerCase() == 'pending payment')
                               ElevatedButton.icon(
                                 onPressed: () => _navigateToPayment(),
-                                icon: const Icon(
-                                    Icons.payment, color: Colors.white),
+                                icon: const Icon(Icons.payment, color: Colors.white),
                                 label: const Text(
                                   'Make Payment',
                                   style: TextStyle(color: Colors.white),
                                 ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.blue,
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 12),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
                                 ),
                               ),
 
@@ -581,16 +578,14 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
                             if (!_isEditing && _userRole != null)
                               ElevatedButton.icon(
                                 onPressed: _prepareForEditing,
-                                icon: const Icon(
-                                    Icons.edit, color: Colors.white),
+                                icon: const Icon(Icons.edit, color: Colors.white),
                                 label: const Text(
                                   'Edit Request',
                                   style: TextStyle(color: Colors.white),
                                 ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF388E3C),
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 12),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
                                 ),
                               ),
 
@@ -601,18 +596,18 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
                               Column(
                                 children: [
                                   const SizedBox(height: 8),
-                                  OutlinedButton.icon(
+                                  ElevatedButton.icon(
                                     onPressed: _showCancelRequestDialog,
-                                    icon: const Icon(
-                                        Icons.cancel, color: Colors.red),
+                                    icon: const Icon(Icons.cancel, color: Colors.white),
                                     label: const Text(
                                       'Cancel Request',
-                                      style: TextStyle(color: Colors.red),
+                                      style: TextStyle(color: Colors.white),
                                     ),
-                                    style: OutlinedButton.styleFrom(
-                                      side: const BorderSide(color: Colors.red),
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 12),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.red,
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      // Make it same as Edit Request button
+                                      minimumSize: const Size(double.infinity, 0),
                                     ),
                                   ),
                                 ],

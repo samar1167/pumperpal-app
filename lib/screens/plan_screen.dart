@@ -23,7 +23,7 @@ class _PlanScreenState extends State<PlanScreen> {
   String? _userRole;
   String? _currentPlanId;
   bool _isYearlyBilling = true;
-  final double _yearlyDiscountPercent = 10.0; // 10% discount for yearly billing
+  final double _yearlyDiscountPercent = double.tryParse(Config.yearlyPlanDiscount.toString()) ?? 0.0;
 
   // Track subscription status
   bool _hasSubscription = false;
@@ -398,7 +398,10 @@ class _PlanScreenState extends State<PlanScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Maintenance Plans'),
+        title: const Text(
+          'Maintenance Plans',
+          style: TextStyle(color: Colors.white),
+        ),
         backgroundColor: const Color(0xFF388E3C),
       ),
       body: Container(
@@ -416,10 +419,13 @@ class _PlanScreenState extends State<PlanScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          _errorMessage!,
-                          style: const TextStyle(color: Colors.red),
-                          textAlign: TextAlign.center,
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                          child: Text(
+                            _errorMessage!,
+                            style: const TextStyle(color: Colors.red),
+                            textAlign: TextAlign.center,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton(
@@ -451,38 +457,42 @@ class _PlanScreenState extends State<PlanScreen> {
               ),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.check_circle,
-                      color: Color(0xFF388E3C),
-                      size: 24,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'You have an active subscription!',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF2E7D32),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Your current plan is highlighted below. You can upgrade or change plans anytime.',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                        ],
+                child: IntrinsicHeight( // Add this wrapper
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start, // Align to top
+                    children: [
+                      const Icon(
+                        Icons.check_circle,
+                        color: Color(0xFF388E3C),
+                        size: 24,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min, // Add this
+                          children: [
+                            const Text(
+                              'You have an active subscription!',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF2E7D32),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Your current plan is highlighted below. You can upgrade or change plans anytime.',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -699,12 +709,15 @@ class _PlanScreenState extends State<PlanScreen> {
                       children: [
                         const Icon(Icons.check_circle, color: Colors.white, size: 18),
                         const SizedBox(width: 8),
-                        const Text(
-                          'CURRENT SUBSCRIPTION',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                        const Flexible(
+                          child: Text(
+                            'CURRENT SUBSCRIPTION',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ],
@@ -720,26 +733,28 @@ class _PlanScreenState extends State<PlanScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Professional',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF2E7D32),
+                          Expanded( // Add this wrapper
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Professional',
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF2E7D32),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                'Enhanced coverage for homeowners who want extra protection.',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey,
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Enhanced coverage for homeowners who want extra protection.',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -848,6 +863,7 @@ class _PlanScreenState extends State<PlanScreen> {
                           _subscribeToProfessionalPlan(true);
                         },
                         child: Stack(
+                          clipBehavior: Clip.none, // Fix overflow issues
                           children: [
                             Card(
                               elevation: 2,
@@ -1017,12 +1033,15 @@ class _PlanScreenState extends State<PlanScreen> {
                 children: [
                   const Icon(Icons.check_circle, color: Colors.white, size: 18),
                   const SizedBox(width: 8),
-                  const Text(
-                    'CURRENT SUBSCRIPTION',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
+                  const Flexible(
+                    child: Text(
+                      'CURRENT SUBSCRIPTION',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ],
@@ -1037,26 +1056,29 @@ class _PlanScreenState extends State<PlanScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF2E7D32),
+                    Expanded( // Add this wrapper
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF2E7D32),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          description,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
+                          const SizedBox(height: 4),
+                          Text(
+                            description,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                            softWrap: true,
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
@@ -1108,6 +1130,7 @@ class _PlanScreenState extends State<PlanScreen> {
                   (feature) => Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Icon(
                           Icons.check_circle,
@@ -1115,7 +1138,12 @@ class _PlanScreenState extends State<PlanScreen> {
                           size: 20,
                         ),
                         const SizedBox(width: 8),
-                        Expanded(child: Text(feature)),
+                        Expanded(
+                          child: Text(
+                            feature,
+                            softWrap: true,
+                          ),
+                        ),
                       ],
                     ),
                   ),

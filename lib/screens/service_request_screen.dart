@@ -547,7 +547,10 @@ class _NewServiceRequestScreenState extends State<NewServiceRequestScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('New Service Request'),
+        title: const Text(
+          'New Service Request',
+          style: TextStyle(color: Colors.white),
+        ),
         backgroundColor: const Color(0xFF388E3C),
       ),
       body: Container(
@@ -558,239 +561,274 @@ class _NewServiceRequestScreenState extends State<NewServiceRequestScreen> {
             end: Alignment.bottomRight,
           ),
         ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Card(
-            elevation: 4.0,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'Create a Service Request',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF2E7D32),
+        child: SafeArea(  // Add SafeArea to respect system UI elements
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0), // Adjusted padding
+            child: Card(
+              elevation: 4.0,
+              margin: const EdgeInsets.symmetric(vertical: 4.0), // Reduced margin
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Create a Service Request',
+                        style: TextStyle(
+                          fontSize: 18, // Slightly reduced font size
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF2E7D32),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Request Type:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
+                      
+                      const SizedBox(height: 12), // Reduced spacing
+                      
+                      // Request Type section
+                      const Text(
+                        'Request Type:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
+                      const SizedBox(height: 4), // Reduced spacing
+                      DropdownButtonFormField<String>(
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10), // Compact padding
+                        ),
+                        value: _selectedRequestType,
+                        items: _requestTypeOptions
+                            .map((option) => DropdownMenuItem<String>(
+                                  value: option,
+                                  child: Text(option),
+                                ))
+                            .toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _requestTypeController.text = value!;
+                          });
+                        },
                       ),
-                      value: _selectedRequestType,
-                      items: _requestTypeOptions
-                          .map((option) => DropdownMenuItem<String>(
-                                value: option,
-                                child: Text(option),
-                              ))
-                          .toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          _requestTypeController.text = value!;
-                        });
-                      },
-                    ),
-                    
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Problem Description:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
+                      
+                      const SizedBox(height: 12), // Reduced spacing
+                      
+                      // Problem Description section
+                      const Text(
+                        'Problem Description:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      controller: _problemDescriptionController,
-                      decoration: const InputDecoration(
-                        hintText: 'Describe the issue you are experiencing...',
-                        border: OutlineInputBorder(),
+                      const SizedBox(height: 4), // Reduced spacing
+                      TextFormField(
+                        controller: _problemDescriptionController,
+                        decoration: const InputDecoration(
+                          hintText: 'Describe the issue...',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10), // Compact padding
+                        ),
+                        maxLines: 4, // Reduced from 5 to 4
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please describe the problem';
+                          }
+                          if (value.length < 10) {
+                            return 'Description is too short';
+                          }
+                          return null;
+                        },
                       ),
-                      maxLines: 5,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please describe the problem';
-                        }
-                        if (value.length < 10) {
-                          return 'Description is too short';
-                        }
-                        return null;
-                      },
-                    ),
-                    
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Service Address:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
+                      
+                      const SizedBox(height: 12), // Reduced spacing
+                      
+                      // Service Address section
+                      const Text(
+                        'Service Address:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    FutureBuilder<List<String>>(
-                      future: _fetchAddresses(), // Fetch addresses from API
-                      builder: (context, snapshot) {
-                        // Always show the "Add New Address" button regardless of connection state
-                        Widget addressSelector;
-                        
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          addressSelector = const Center(
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 10.0),
-                              child: CircularProgressIndicator(),
-                            )
-                          );
-                        } else if (snapshot.hasError) {
-                          addressSelector = Text(
-                            'Error loading addresses: ${snapshot.error}',
-                            style: const TextStyle(color: Colors.red),
-                          );
-                        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                          addressSelector = const Text(
-                            'No addresses available. Please add a new address.',
-                            style: TextStyle(fontStyle: FontStyle.italic),
-                          );
-                        } else {
-                          // We have addresses to display
-                          final addresses = snapshot.data!;
-                          addressSelector = DropdownButtonFormField<String>(
-                            decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                            ),
-                            value: _addressController.text.isNotEmpty ? _addressController.text : null,
-                            items: addresses
-                              .map((address) {
-                                final parts = address.split(',');
-                                final id = parts.isNotEmpty ? parts[0] : '';
-                                final displayText = parts.length > 1 ? parts.sublist(1).join(',') : address;
-                                return DropdownMenuItem<String>(
-                                  value: id,
-                                  child: Text(displayText.trim()),
-                                );
-                              })
-                              .toList(),
-                            onChanged: (value) {
-                              setState(() {
-                                _addressController.text = value!;
-                              });
-                            },
-                            hint: const Text('Select an address'),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please select or add an address';
-                              }
-                              return null;
-                            },
-                          );
-                        }
-                        
-                        // Return a column with both the address selector and the Add New Address button
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            addressSelector,
-                            const SizedBox(height: 12),
-                            ElevatedButton.icon(
-                              onPressed: _navigateToAddAddressScreen,
-                              icon: const Icon(Icons.add),
-                              label: const Text('Add New Address'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF388E3C),
+                      const SizedBox(height: 4),
+
+                      // Use FutureBuilder without wrapping it in a SizedBox with dynamic height
+                      FutureBuilder<List<String>>(
+                        future: _fetchAddresses(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(10.0),
+                                child: CircularProgressIndicator(strokeWidth: 2),
                               ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                    
-                    const SizedBox(height: 8),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                      const Text(
-                        'Scheduled Date:',
-                        style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        readOnly: true,
-                        decoration: InputDecoration(
-                        hintText: DateFormat('yyyy-MM-dd').format(_selectedScheduledDate),
-                        border: const OutlineInputBorder(),
-                        suffixIcon: const Icon(Icons.calendar_today),
-                        ),
-                        onTap: () async {
-                        final pickedDate = await showDatePicker(
-                          context: context,
-                          initialDate: _selectedScheduledDate,
-                          firstDate: DateTime.now(),
-                          lastDate: DateTime(2100),
-                        );
-                        if (pickedDate != null) {
-                          setState(() {
-                          _selectedScheduledDate = pickedDate;
-                          });
-                        }
+                            );
+                          } else if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
+                            // Handle empty or error state
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                TextFormField(
+                                  controller: _addressController,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Enter address manually',
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  ),
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please provide an address';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 8),
+                                OutlinedButton.icon(
+                                  onPressed: _navigateToAddAddressScreen,
+                                  icon: const Icon(Icons.add, size: 16),
+                                  label: const Text('Add New Address'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFF388E3C),
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                  ),
+                                ),
+                              ],
+                            );
+                          } else {
+                            // Display addresses dropdown when we have data
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                DropdownButtonFormField<String>(
+                                  decoration: const InputDecoration(
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  ),
+                                  value: _addressController.text.isEmpty ? null : _addressController.text,
+                                  hint: const Text('Select an address'),
+                                  items: snapshot.data!.map((address) => DropdownMenuItem<String>(
+                                    value: address,
+                                    child: Text(
+                                      address,
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  )).toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _addressController.text = value ?? '';
+                                    });
+                                  },
+                                  validator: (value) {
+                                    if (value == null || value.isEmpty) {
+                                      return 'Please select an address';
+                                    }
+                                    return null;
+                                  },
+                                  isExpanded: true, // This ensures dropdown doesn't overflow
+                                ),
+                                const SizedBox(height: 8),
+                                OutlinedButton.icon(
+                                  onPressed: _navigateToAddAddressScreen,
+                                  icon: const Icon(Icons.add, size: 16),
+                                  label: const Text('Add New Address'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFF388E3C),
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }
                         },
                       ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Scheduled Time:',
-                        style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      
+                      // Scheduled date and time with more compact layout
                       const SizedBox(height: 8),
-                      TextFormField(
-                        readOnly: true,
-                        decoration: InputDecoration(
-                        hintText: _selectedScheduledTime.format(context),
-                        border: const OutlineInputBorder(),
-                        suffixIcon: const Icon(Icons.access_time),
-                        ),
-                        onTap: () async {
-                        final pickedTime = await showTimePicker(
-                          context: context,
-                          initialTime: _selectedScheduledTime,
-                        );
-                        if (pickedTime != null) {
-                          setState(() {
-                          _selectedScheduledTime = pickedTime;
-                          });
-                        }
-                        },
-                      ),
-                      ],
-                    ),
-                    
-                    const SizedBox(height: 24),
-                    _isSubmitting
-                        ? const Center(child: CircularProgressIndicator())
-                        : ElevatedButton(
-                            onPressed: _submitServiceRequest,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF388E3C),
-                              padding: const EdgeInsets.symmetric(vertical: 15),
-                            ),
-                            child: const Text(
-                              'Submit Request',
-                              style: TextStyle(fontSize: 18),
+                      Row(  // Use Row to place date and time side by side
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Scheduled Date:',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 4),
+                                TextFormField(
+                                  readOnly: true,
+                                  decoration: InputDecoration(
+                                    hintText: DateFormat('yyyy-MM-dd').format(_selectedScheduledDate),
+                                    border: const OutlineInputBorder(),
+                                    suffixIcon: const Icon(Icons.calendar_today, size: 20),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  ),
+                                  onTap: () async {
+                                    final pickedDate = await showDatePicker(
+                                      context: context,
+                                      initialDate: _selectedScheduledDate,
+                                      firstDate: DateTime.now(),
+                                      lastDate: DateTime(2100),
+                                    );
+                                    if (pickedDate != null) {
+                                      setState(() {
+                                      _selectedScheduledDate = pickedDate;
+                                      });
+                                    }
+                                  },
+                                ),
+                              ],
                             ),
                           ),
-                  ],
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Scheduled Time:',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 4),
+                                TextFormField(
+                                  readOnly: true,
+                                  decoration: InputDecoration(
+                                    hintText: _selectedScheduledTime.format(context),
+                                    border: const OutlineInputBorder(),
+                                    suffixIcon: const Icon(Icons.access_time, size: 20),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  ),
+                                  onTap: () async {
+                                    final pickedTime = await showTimePicker(
+                                      context: context,
+                                      initialTime: _selectedScheduledTime,
+                                    );
+                                    if (pickedTime != null) {
+                                      setState(() {
+                                      _selectedScheduledTime = pickedTime;
+                                      });
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 20), // Adjusted final spacing
+                      _isSubmitting
+                          ? const Center(child: CircularProgressIndicator())
+                          : ElevatedButton(
+                              onPressed: _submitServiceRequest,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF388E3C),
+                                padding: const EdgeInsets.symmetric(vertical: 12), // Reduced padding
+                              ),
+                              child: const Text(
+                                'Submit Request',
+                                style: TextStyle(fontSize: 16, color: Colors.white), // Slightly smaller font
+                              ),
+                            ),
+                    ],
+                  ),
                 ),
               ),
             ),

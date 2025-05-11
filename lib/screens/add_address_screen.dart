@@ -97,8 +97,12 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add New Address'),
+        title: const Text(
+          'Add New Address',
+          style: TextStyle(color: Colors.white),
+        ),
         backgroundColor: const Color(0xFF388E3C),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -251,7 +255,7 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
                             ),
                             child: const Text(
                               'Save Address',
-                              style: TextStyle(fontSize: 18),
+                              style: TextStyle(fontSize: 18, color: Colors.white),
                             ),
                           ),
                   ],
