@@ -28,13 +28,31 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
+
+        multiDexEnabled = true
+    }
+
+    signingConfigs {
+        create("release") {
+            // If needed for release signing
+            // storeFile = file("key.jks")
+            // storePassword = "your-password"
+            // keyAlias = "your-alias"
+            // keyPassword = "your-password"
+        }
     }
 
     buildTypes {
-        release {
-            // TODO: Add your own signing config for the release build.
+        getByName("release") {
+            isMinifyEnabled = false
+            isShrinkResources = false
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }
