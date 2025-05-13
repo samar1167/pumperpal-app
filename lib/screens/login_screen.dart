@@ -7,6 +7,9 @@ import 'package:ppal/screens/device_list_screen.dart';
 // Import the register screen
 import 'package:ppal/screens/register_screen.dart';
 import 'package:ppal/common.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -21,27 +24,33 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
 
   Future<void> _handleLogin() async {
-    final baseUrl = Config.backendUrl;
-    final apiUrl = '$baseUrl/users/login/';
-    final requestBody = {
-      'username': _usernameController.text,
-      'password': _passwordController.text,
-    };
+    final email = _usernameController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter both email and password')),
+      );
+      return;
+    }
 
     setState(() {
       _isLoading = true;
     });
 
     try {
+      final baseUrl = Config.backendUrl;
+      final apiUrl = '$baseUrl/users/login/';
+      final requestBody = {
+        'username': email,
+        'password': password,
+      };
+
       final response = await http.post(
         Uri.parse(apiUrl),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(requestBody),
       );
-
-      setState(() {
-        _isLoading = false;
-      });
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
@@ -51,20 +60,68 @@ class _LoginScreenState extends State<LoginScreen> {
           responseData['user_id'].toString()
         );
         
-        // Navigate back to the calling screen
-        Navigator.pop(context);
+        // After successful login, register the device
+        await _registerDevice(responseData['token']);
+        
+        // Return true to the calling screen to indicate successful login
+        Navigator.pop(context, true);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login failed: ${response.reasonPhrase}')),
+          SnackBar(content: Text('Login failed: ${response.reasonPhrase ?? "Invalid credentials"}')),
         );
       }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
       );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  // Add this method to register device after successful login
+  Future<void> _registerDevice(String authToken) async {
+    try {
+      // Get the stored FCM token
+      final prefs = await SharedPreferences.getInstance();
+      final fcmToken = prefs.getString('fcm_token');
+      if (fcmToken == null || fcmToken.isEmpty) return;
+      
+      final deviceInfo = DeviceInfoPlugin();
+      String deviceId = '';
+      String deviceModel = '';
+      
+      if (Platform.isAndroid) {
+        AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+        deviceId = androidInfo.id ?? 'unknown-android';
+        deviceModel = androidInfo.model ?? 'Unknown Android Device';
+      } else if (Platform.isIOS) {
+        IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
+        deviceId = iosInfo.identifierForVendor ?? 'unknown-ios';
+        deviceModel = iosInfo.utsname.machine ?? 'Unknown iOS Device';
+      }
+      
+      final baseUrl = Config.backendUrl;
+      final apiUrl = '$baseUrl/notifications/mobile/register/';
+      
+      await http.post(
+        Uri.parse(apiUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $authToken',
+        },
+        body: jsonEncode({
+          "token": fcmToken,
+          "platform": Platform.isIOS ? "ios" : "android",
+        }),
+      );
+      
+      print("Device registered successfully after login");
+    } catch (e) {
+      print("Error registering device: $e");
+      // Don't fail the login if device registration fails
     }
   }
 

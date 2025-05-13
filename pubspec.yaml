@@ -48,6 +48,11 @@ dependencies:
   permission_handler: ^11.3.0
   device_info_plus: ^10.1.0
 
+  # Firebase dependencies, for notifiation
+  firebase_core:
+  firebase_messaging:
+#  flutter_local_notifications:
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

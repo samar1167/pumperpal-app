@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:ppal/services/auth_service.dart';
 import 'package:ppal/common.dart';
 import 'package:ppal/screens/payment_screen.dart';
+import 'package:ppal/screens/login_screen.dart'; // Import LoginScreen
 
 
 class PlanScreen extends StatefulWidget {
@@ -24,6 +25,7 @@ class _PlanScreenState extends State<PlanScreen> {
   String? _currentPlanId;
   bool _isYearlyBilling = true;
   final double _yearlyDiscountPercent = double.tryParse(Config.yearlyPlanDiscount.toString()) ?? 0.0;
+  final double _monthlyPriceProfessional = double.tryParse(Config.monthlyPriceProfessional.toString()) ?? 0.0;
 
   // Track subscription status
   bool _hasSubscription = false;
@@ -42,19 +44,26 @@ class _PlanScreenState extends State<PlanScreen> {
       });
 
       final token = await AuthService.getAuthToken();
+      
+      // If token is null, user is not logged in - show plan info without requiring login
       if (token == null) {
         setState(() {
-          _errorMessage = 'Authentication required.';
+          _userRole = null;
+          _hasSubscription = false;
+          _currentPlanId = null;
           _isLoading = false;
         });
-        return;
+        return; // This return is important - don't try to make API calls without a token
       }
 
+      // The rest of the function only executes if user is logged in
       // Get user info from AuthService instead of a separate API call
       final userInfo = await AuthService.getUserInfo();
       if (userInfo == null) {
         setState(() {
-          _errorMessage = 'Failed to load user information.';
+          _userRole = null;
+          _hasSubscription = false;
+          _currentPlanId = null;
           _isLoading = false;
         });
         return;
@@ -107,50 +116,52 @@ class _PlanScreenState extends State<PlanScreen> {
         }
       } else {
         setState(() {
-          _errorMessage = 'Failed to load plan subscription info.';
+          _userRole = userInfo['role'];
+          _hasSubscription = false;
+          _currentPlanId = null;
           _isLoading = false;
         });
       }
     } catch (e) {
+      // Even if there's an error, still show plans to non-logged-in users
       setState(() {
-        _errorMessage = 'Error: $e';
+        _userRole = null;
+        _hasSubscription = false;
+        _currentPlanId = null;
         _isLoading = false;
+        _errorMessage = null; // Don't show error messages for non-logged in users
       });
     }
   }
 
   Future<void> _subscribeToPlan(String planId) async {
     try {
+      // Check if user is logged in
+      final token = await AuthService.getAuthToken();
+      if (token == null) {
+        // Show login dialog
+        _showLoginRequiredDialog(() {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+          ).then((_) {
+            // After login (if successful), try to subscribe again
+            _loadUserInfo().then((_) {
+              _subscribeToPlan(planId);
+            });
+          });
+        });
+        return;
+      }
+
       setState(() {
         _isLoading = true;
       });
 
-      final token = await AuthService.getAuthToken();
-      if (token == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Authentication required')),
-        );
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-
-      // Get user info from AuthService instead of a separate API call
-      final userInfo = await AuthService.getUserInfo();
-      if (userInfo == null) {
-        setState(() {
-          _errorMessage = 'Failed to load user information.';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      final baseUrl = Config.backendUrl;
-      
       // Handle free plan differently than paid plans
       if (planId == '1') {  // Basic Plan is free
         // Call plan enrollment API directly for free plans
+        final baseUrl = Config.backendUrl;
         final response = await http.post(
           Uri.parse('$baseUrl/common/plans/enroll/'),
           headers: {
@@ -198,7 +209,7 @@ class _PlanScreenState extends State<PlanScreen> {
         }
         
         // For Professional plan (planId == '2'), calculate correct amount based on billing cycle
-        double amount = 49.0; // Monthly price for Professional plan
+        double amount = _monthlyPriceProfessional; // Monthly price for Professional plan
         
         // Apply yearly discount if yearly billing is selected
         if (_isYearlyBilling) {
@@ -248,105 +259,32 @@ class _PlanScreenState extends State<PlanScreen> {
     }
   }
 
-  // For Enterprise plan - contact sales
-  void _contactSales() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Contact Our Sales Team'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            Text(
-              'For Enterprise plans, our sales team will create a custom solution based on your needs.',
-              style: TextStyle(fontSize: 16),
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Please contact us at:',
-              style: TextStyle(fontSize: 16),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Email: enterprise@pumperpal.com',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            Text(
-              'Phone: (800) 555-1234',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Calculate yearly price with discount
-  double _calculateYearlyPrice(double monthlyPrice) {
-    final yearlyPrice = monthlyPrice * 12;
-    final discountAmount = yearlyPrice * (_yearlyDiscountPercent / 100);
-    return yearlyPrice - discountAmount;
-  }
-
-  // Format price based on billing cycle
-  String _formatPrice(dynamic price, {bool yearly = false}) {
-    if (price == null || price == 'Free' || price == 'Custom') {
-      return price.toString();
-    }
-    
-    try {
-      if (price is String && price.startsWith('\$')) {
-        price = double.parse(price.substring(1));
-      } else if (price is String) {
-        price = double.parse(price);
-      }
-      
-      if (yearly) {
-        price = _calculateYearlyPrice(price);
-      }
-      
-      return '\$${price.toStringAsFixed(2)}';
-    } catch (e) {
-      return price.toString();
-    }
-  }
-
   void _subscribeToProfessionalPlan(bool isYearly) async {
     try {
+      // Check if user is logged in
+      final token = await AuthService.getAuthToken();
+      if (token == null) {
+        // Show login dialog
+        _showLoginRequiredDialog(() {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+          ).then((_) {
+            // After login (if successful), try to subscribe again
+            _loadUserInfo().then((_) {
+              _subscribeToProfessionalPlan(isYearly);
+            });
+          });
+        });
+        return;
+      }
+
       setState(() {
         _isLoading = true;
       });
-
-      final token = await AuthService.getAuthToken();
-      if (token == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Authentication required')),
-        );
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-
-      // Get user info from AuthService
-      final userInfo = await AuthService.getUserInfo();
-      if (userInfo == null) {
-        setState(() {
-          _errorMessage = 'Failed to load user information.';
-          _isLoading = false;
-        });
-        return;
-      }
-      
+    
       // Calculate amount based on selected billing cycle
-      double amount = 49.0; // Monthly price
+      double amount = _monthlyPriceProfessional; // Monthly price
     
       // Apply yearly discount if yearly billing is selected
       if (isYearly) {
@@ -394,6 +332,200 @@ class _PlanScreenState extends State<PlanScreen> {
     }
   }
 
+  // For Enterprise plan - contact sales
+  void _contactSales() async {
+    // Check if user is logged in
+    final token = await AuthService.getAuthToken();
+    if (token == null) {
+      // Show login dialog
+      _showLoginRequiredDialog(() {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+        ).then((_) {
+          // After login (if successful), show contact dialog
+          _loadUserInfo().then((_) {
+            _showContactSalesDialog();
+          });
+        });
+      });
+      return;
+    }
+
+    _showContactSalesDialog();
+  }
+
+  // Add a helper method to show login required dialog
+  void _showLoginRequiredDialog(VoidCallback onLogin) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Login Required'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.login,
+              size: 48,
+              color: Color(0xFF388E3C),
+            ),
+            SizedBox(height: 16),
+            Text(
+              'You need to log in or create an account to subscribe to a plan.',
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              onLogin();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF388E3C),
+            ),
+            child: const Text(
+              'Login',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Calculate yearly price with discount
+  double _calculateYearlyPrice(double monthlyPrice) {
+    final yearlyPrice = monthlyPrice * 12;
+    final discountAmount = yearlyPrice * (_yearlyDiscountPercent / 100);
+    return yearlyPrice - discountAmount;
+  }
+
+  // Format price based on billing cycle
+  String _formatPrice(dynamic price, {bool yearly = false}) {
+    if (price == null || price == 'Free' || price == 'Custom') {
+      return price.toString();
+    }
+    
+    try {
+      if (price is String && price.startsWith('\$')) {
+        price = double.parse(price.substring(1));
+      } else if (price is String) {
+        price = double.parse(price);
+      }
+      
+      if (yearly) {
+        price = _calculateYearlyPrice(price);
+      }
+      
+      return '\$${price.toStringAsFixed(2)}';
+    } catch (e) {
+      return price.toString();
+    }
+  }
+
+  // Add this method to _PlanScreenState class
+  void _showContactSalesDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Enterprise Plan'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(
+              Icons.business,
+              size: 48,
+              color: Color(0xFF388E3C),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Thank you for your interest in our Enterprise plan!',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Our Enterprise plan is custom-tailored to fit your business needs. Please contact our sales team for personalized pricing and features.',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Contact Information:',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.email, size: 16, color: Color(0xFF388E3C)),
+                const SizedBox(width: 8),
+                SelectableText(
+                  'enterprise@pumperpal.com',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.phone, size: 16, color: Color(0xFF388E3C)),
+                const SizedBox(width: 8),
+                SelectableText(
+                  '(800) 555-1234',
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'A sales representative will contact you within 1 business day.',
+              style: TextStyle(
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+                color: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              // Attempt to launch email client
+              final Uri emailLaunchUri = Uri(
+                scheme: 'mailto',
+                path: 'enterprise@pumperpal.com',
+                query: 'subject=Enterprise Plan Inquiry',
+              );
+              launchUrl(emailLaunchUri);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF388E3C),
+            ),
+            child: const Text(
+              'Send Email',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -415,28 +547,7 @@ class _PlanScreenState extends State<PlanScreen> {
         ),
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
-            : _errorMessage != null
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                          child: Text(
-                            _errorMessage!,
-                            style: const TextStyle(color: Colors.red),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _loadUserInfo,
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  )
-                : _buildPlansView(),
+            : _buildPlansView(),
       ),
     );
   }
@@ -843,7 +954,7 @@ class _PlanScreenState extends State<PlanScreen> {
                                   ],
                                 ),
                                 Text(
-                                  '\$49.00',
+                                  _monthlyPriceProfessional.toStringAsFixed(2),
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
@@ -897,7 +1008,7 @@ class _PlanScreenState extends State<PlanScreen> {
                                       crossAxisAlignment: CrossAxisAlignment.end,
                                       children: [
                                         Text(
-                                          '\$${_calculateYearlyPrice(49.0).toStringAsFixed(2)}',
+                                          '\$${_calculateYearlyPrice(_monthlyPriceProfessional).toStringAsFixed(2)}',
                                           style: const TextStyle(
                                             fontSize: 18,
                                             fontWeight: FontWeight.bold,
@@ -905,7 +1016,7 @@ class _PlanScreenState extends State<PlanScreen> {
                                           ),
                                         ),
                                         Text(
-                                          '(\$${(49.0 * 12).toStringAsFixed(2)})',
+                                          '(\$${(_monthlyPriceProfessional * 12).toStringAsFixed(2)})',
                                           style: const TextStyle(
                                             fontSize: 12,
                                             decoration: TextDecoration.lineThrough,

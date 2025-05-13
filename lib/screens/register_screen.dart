@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:ppal/common.dart';
+import 'package:ppal/services/auth_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -33,6 +37,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
       });
     }
 
+    // Validate input fields
+    if (_nameController.text.isEmpty || 
+        _emailController.text.isEmpty || 
+        _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill in all fields')),
+      );
+      return;
+    }
+
     final baseUrl = Config.backendUrl;
     final apiUrl = '$baseUrl/users/register/';
     final requestBody = {
@@ -53,28 +67,105 @@ class _RegisterScreenState extends State<RegisterScreen> {
         body: jsonEncode(requestBody),
       );
 
-      setState(() {
-        _isLoading = false;
-      });
-
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         final responseData = jsonDecode(response.body);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Registration successful: ${responseData['message']}')),
-        );
-        Navigator.pop(context); // Navigate back to the previous screen
+        
+        // Auto-login after registration by saving the token
+        if (responseData['token'] != null && responseData['user_id'] != null) {
+          await AuthService.saveAuthToken(
+            responseData['token'], 
+            responseData['user_id'].toString()
+          );
+          
+          // Register device with the server
+          await _registerDevice(responseData['token']);
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Registration successful! You are now logged in.')),
+          );
+        } else {
+          // If no token is returned, just show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Registration successful! Please log in.')),
+          );
+        }
+        
+        Navigator.pop(context, true); // Return true to indicate successful registration
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Registration failed: ${response.reasonPhrase}')),
-        );
+        // Try to parse error messages from the response
+        try {
+          final errorData = jsonDecode(response.body);
+          String errorMessage = 'Registration failed';
+          
+          if (errorData['message'] != null) {
+            errorMessage = errorData['message'];
+          } else if (errorData['error'] != null) {
+            errorMessage = errorData['error'];
+          } else if (errorData['detail'] != null) {
+            errorMessage = errorData['detail'];
+          }
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(errorMessage)),
+          );
+        } catch (_) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Registration failed: ${response.reasonPhrase}')),
+          );
+        }
       }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
       );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  // Add this method to register device after successful registration
+  Future<void> _registerDevice(String authToken) async {
+    try {
+      // Get the stored FCM token
+      final prefs = await SharedPreferences.getInstance();
+      final fcmToken = prefs.getString('fcm_token');
+      if (fcmToken == null || fcmToken.isEmpty) return;
+      
+      final deviceInfo = DeviceInfoPlugin();
+      String deviceId = '';
+      String deviceModel = '';
+      
+      if (Platform.isAndroid) {
+        AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+        deviceId = androidInfo.id ?? 'unknown-android';
+        deviceModel = androidInfo.model ?? 'Unknown Android Device';
+      } else if (Platform.isIOS) {
+        IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
+        deviceId = iosInfo.identifierForVendor ?? 'unknown-ios';
+        deviceModel = iosInfo.utsname.machine ?? 'Unknown iOS Device';
+      }
+      
+      final baseUrl = Config.backendUrl;
+      final apiUrl = '$baseUrl/notifications/mobile/register/';
+      
+      await http.post(
+        Uri.parse(apiUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $authToken',
+        },
+        body: jsonEncode({
+          "token": fcmToken,
+          "platform": Platform.isIOS ? "ios" : "android",
+        }),
+      );
+      
+      print("Device registered successfully after registration");
+    } catch (e) {
+      print("Error registering device: $e");
+      // Don't fail the registration if device registration fails
     }
   }
 

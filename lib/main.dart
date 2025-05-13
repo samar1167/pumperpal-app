@@ -4,36 +4,56 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+// import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'package:ppal/screens/splash_screen.dart';
 
 
-// void main() async {
-//   // Ensure Flutter is initialized
-//   WidgetsFlutterBinding.ensureInitialized();
+// final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  // _showLocalNotification(message);
+}
+
+// Future<void> _showLocalNotification(RemoteMessage message) async {
+//   RemoteNotification? notification = message.notification;
+//   AndroidNotification? android = message.notification?.android;
 //
-//   runApp(const MyApp());
+//   if (notification != null && android != null) {
+//     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+//       'high_importance_channel',
+//       'High Importance Notifications',
+//       importance: Importance.max,
+//       priority: Priority.high,
+//     );
+//
+//     const NotificationDetails notificationDetails = NotificationDetails(android: androidDetails);
+//
+//     await flutterLocalNotificationsPlugin.show(
+//       notification.hashCode,
+//       notification.title,
+//       notification.body,
+//       notificationDetails,
+//     );
+//   }
 // }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
 
-  // Optional: Initialize Firebase
-  // await Firebase.initializeApp();
-  // FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterError;
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-  FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details);
-    print('Flutter Error: ${details.exception}');
-    // FirebaseCrashlytics.instance.recordFlutterError(details);
-  };
+  // const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+  // const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
+  //
+  // await flutterLocalNotificationsPlugin.initialize(initializationSettings);
 
-  runZonedGuarded(() async {
-    runApp(MyApp());
-  }, (Object error, StackTrace stackTrace) {
-    print('Zoned Error: $error');
-    // FirebaseCrashlytics.instance.recordError(error, stackTrace);
-  });
+  runApp(MyApp());
 }
 
 class MyApp extends StatefulWidget {
@@ -43,13 +63,14 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   String _deviceModel = 'Unknown';
+  String? _token;
 
   @override
   void initState() {
     super.initState();
     _initPermissions();
     _getDeviceInfo();
-    print ("SAM 1: $_deviceModel");
+    _setupFCM();
   }
 
   Future<void> _initPermissions() async {
@@ -75,8 +96,24 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
-// class MyApp extends StatelessWidget {
-//   const MyApp({super.key});
+  Future<void> _setupFCM() async {
+    FirebaseMessaging _messaging = FirebaseMessaging.instance;
+
+    NotificationSettings settings = await _messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      // _showLocalNotification(message);
+    });
+
+    _messaging.getToken().then((token) {
+      print("🔑 FCM Token: $token");
+      // send this token to Django backend for sending notifications
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

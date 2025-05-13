@@ -217,87 +217,54 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    return Stack(
-      children: [
-        _buildCard(
+    return _buildCard(
+      context,
+      title: _isLoggedIn ? '' : 'Account',
+      icon: Icons.account_circle,
+      onTap: () {
+        // Navigate to the profile screen
+        Navigator.push(
           context,
-          title: _isLoggedIn ? '' : 'Account', // Changed from 'Login' to 'Account'
-          icon: _isLoggedIn ? Icons.account_circle : Icons.account_circle,
-          onTap: () {
-            // Navigate to the profile screen instead of directly showing login/logout
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const ProfileScreen()),
-            ).then((_) {
-              // Refresh the home screen when returning from profile screen
-              _checkLoginStatus();
-            });
-          },
-          customChild: _isLoggedIn ? Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.account_circle, size: 40, color: Colors.white),
-              const SizedBox(height: 8),
-              Text(
-                'Hello, ${_userName?.split(' ').first ?? 'User'}!',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Role: ${_userRole ?? 'Unknown'}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'View Profile',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.white,
-                ),
-              ),
-            ],
-          ) : null,
-        ),
-        // Only show notification badge if there are notifications and user is logged in
-        if (_isLoggedIn && _notificationCount > 0)
-          Positioned(
-            top: 10,
-            right: 10,
-            child: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white, width: 1.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 3,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: Text(
-                _notificationCount > 99 ? '99+' : _notificationCount.toString(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              ),
+          MaterialPageRoute(builder: (context) => const ProfileScreen()),
+        ).then((_) {
+          // Refresh the home screen when returning from profile screen
+          _checkLoginStatus();
+        });
+      },
+      customChild: _isLoggedIn ? Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.account_circle, size: 40, color: Colors.white),
+          const SizedBox(height: 8),
+          Text(
+            'Hello, ${_userName?.split(' ').first ?? 'User'}!',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
             ),
           ),
-      ],
+          const SizedBox(height: 4),
+          Text(
+            'Role: ${_userRole ?? 'Unknown'}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'View Profile',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ) : null,
     );
   }
 

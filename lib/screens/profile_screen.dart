@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:ppal/common.dart';
 import 'package:ppal/services/auth_service.dart';
 import 'package:ppal/screens/login_screen.dart';
+import 'package:ppal/screens/register_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -20,6 +21,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _userRole;
   List<Map<String, dynamic>> _notifications = [];
   bool _isLoadingNotifications = false;
+  bool _isLoadingMoreNotifications = false; // New variable for "Load More"
+  String? _nextPageUrl; // Track the URL for the next page
+  int _page = 1; // Track current page number
 
   @override
   void initState() {
@@ -57,11 +61,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
-  Future<void> _fetchNotifications() async {
+  // Update the notifications fetching method to handle pagination
+  Future<void> _fetchNotifications({bool loadMore = false}) async {
     if (!_isLoggedIn) return;
     
     setState(() {
-      _isLoadingNotifications = true;
+      if (loadMore) {
+        _isLoadingMoreNotifications = true;
+      } else {
+        _isLoadingNotifications = true;
+        _page = 1; // Reset page number for fresh loads
+      }
     });
 
     try {
@@ -69,12 +79,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (token == null) {
         setState(() {
           _isLoadingNotifications = false;
+          _isLoadingMoreNotifications = false;
         });
         return;
       }
 
       final baseUrl = Config.backendUrl;
-      final apiUrl = '$baseUrl/notifications/';
+      
+      // Use next page URL if loading more, or construct initial URL
+      final apiUrl = loadMore ? _nextPageUrl : '$baseUrl/notifications/?page=$_page';
+      
+      if (apiUrl == null) {
+        // No more pages to load
+        setState(() {
+          _isLoadingMoreNotifications = false;
+        });
+        return;
+      }
 
       final response = await http.get(
         Uri.parse(apiUrl),
@@ -86,27 +107,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        
+        // Check if there's a next page URL in the response
+        _nextPageUrl = data['next'];
+        
+        List<Map<String, dynamic>> newNotifications = [];
+        if (data is List) {
+          newNotifications = List<Map<String, dynamic>>.from(data);
+        } else if (data['results'] != null && data['results'] is List) {
+          newNotifications = List<Map<String, dynamic>>.from(data['results']);
+        }
+        
         setState(() {
-          if (data is List) {
-            _notifications = List<Map<String, dynamic>>.from(data);
-          } else if (data['results'] != null && data['results'] is List) {
-            _notifications = List<Map<String, dynamic>>.from(data['results']);
+          if (loadMore) {
+            // Add new notifications to existing list
+            _notifications.addAll(newNotifications);
+            _isLoadingMoreNotifications = false;
+            _page++; // Increment page number
           } else {
-            _notifications = [];
+            // Replace existing notifications
+            _notifications = newNotifications;
+            _isLoadingNotifications = false;
           }
-          _isLoadingNotifications = false;
         });
       } else {
         setState(() {
-          _notifications = [];
+          if (!loadMore) {
+            _notifications = [];
+          }
           _isLoadingNotifications = false;
+          _isLoadingMoreNotifications = false;
         });
       }
     } catch (e) {
       print('Error fetching notifications: $e');
       setState(() {
-        _notifications = [];
+        if (!loadMore) {
+          _notifications = [];
+        }
         _isLoadingNotifications = false;
+        _isLoadingMoreNotifications = false;
       });
     }
   }
@@ -171,46 +211,86 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildProfileContent() {
     if (!_isLoggedIn) {
-      return Center(
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.account_circle,
-              size: 80,
-              color: Color(0xFF388E3C),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Not Logged In',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+            // Combined user info and actions card for non-logged in users
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
               ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Please log in to view your profile',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LoginScreen()),
-                ).then((_) => _checkLoginStatus());
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF388E3C),
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
-              ),
-              child: const Text(
-                'Login',
-                style: TextStyle(color: Colors.white, fontSize: 16),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    const CircleAvatar(
+                      radius: 40,
+                      backgroundColor: Color(0xFF388E3C),
+                      child: Icon(
+                        Icons.account_circle,
+                        size: 50,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Not Logged In',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Please log in to view your profile',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const LoginScreen()),
+                            ).then((_) => _checkLoginStatus());
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF388E3C),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          ),
+                          child: const Text(
+                            'Login',
+                            style: TextStyle(color: Colors.white, fontSize: 16),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        OutlinedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const RegisterScreen()),
+                            ).then((_) => _checkLoginStatus());
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFF388E3C)),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          ),
+                          child: const Text(
+                            'Register',
+                            style: TextStyle(color: Color(0xFF388E3C), fontSize: 16),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -223,212 +303,240 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Combined user info and account actions for logged-in users
           Card(
             elevation: 4,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(15),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  const CircleAvatar(
-                    radius: 40,
-                    backgroundColor: Color(0xFF388E3C),
-                    child: Icon(
-                      Icons.person,
-                      size: 40,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _userName ?? 'User',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const CircleAvatar(
+                        radius: 40,
+                        backgroundColor: Color(0xFF388E3C),
+                        child: Icon(
+                          Icons.person,
+                          size: 40,
+                          color: Colors.white,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _userEmail ?? '',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF388E3C).withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            'Role: ${_userRole ?? 'User'}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF388E3C),
-                              fontWeight: FontWeight.bold,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _userName ?? 'User',
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _userEmail ?? '',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF388E3C).withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                'Thank you dear ${_userRole ?? 'User'}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF388E3C),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                InkWell(
+                  onTap: _handleLogout,
+                  child: const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.logout, color: Colors.red),
+                        SizedBox(width: 10),
+                        Text(
+                          'Logout',
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
                           ),
                         ),
                       ],
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
+          
           const SizedBox(height: 20),
           
-          Card(
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Account Actions',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+          // Notifications card remains separate
+          _buildNotificationsCard(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotificationsCard() {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Notifications',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (_notifications.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      _notifications.length.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  ListTile(
-                    leading: const Icon(Icons.logout, color: Colors.red),
-                    title: const Text('Logout'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: _handleLogout,
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (_isLoadingNotifications)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(20.0),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else if (_notifications.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20.0),
+                child: Center(
+                  child: Text(
+                    'No notifications',
+                    style: TextStyle(color: Colors.grey),
                   ),
-                ],
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 20),
-          
-          Card(
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                ),
+              )
+            else
+              Column(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Notifications',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                  ..._notifications.map((notification) {
+                    final bool isUnread = notification['read'] == false;
+                    return Dismissible(
+                      key: Key(notification['id'].toString()),
+                      background: Container(
+                        color: Colors.green,
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: const Icon(Icons.check, color: Colors.white),
                       ),
-                      if (_notifications.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            _notifications.length.toString(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
+                      direction: DismissDirection.startToEnd,
+                      onDismissed: (_) {
+                        _markNotificationAsRead(notification['id'].toString());
+                      },
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(vertical: 5, horizontal: 0),
+                        leading: CircleAvatar(
+                          backgroundColor: isUnread ? Colors.red : Colors.grey,
+                          child: Icon(
+                            isUnread ? Icons.notifications_active : Icons.notifications,
+                            color: Colors.white,
                           ),
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  _isLoadingNotifications
-                      ? const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(20.0),
-                            child: CircularProgressIndicator(),
+                        title: Text(
+                          notification['title'] ?? 'Notification',
+                          style: TextStyle(
+                            fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
                           ),
-                        )
-                      : _notifications.isEmpty
-                          ? const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 20.0),
-                              child: Center(
-                                child: Text(
-                                  'No notifications',
-                                  style: TextStyle(color: Colors.grey),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(notification['message'] ?? ''),
+                            const SizedBox(height: 4),
+                            Text(
+                              _formatDateTime(notification['created_at'] ?? ''),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                        ),
+                        isThreeLine: true,
+                        onTap: () {
+                          _markNotificationAsRead(notification['id'].toString());
+                        },
+                      ),
+                    );
+                  }).toList(),
+                  
+                  // "Load More" button
+                  if (_nextPageUrl != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16.0),
+                      child: Center(
+                        child: _isLoadingMoreNotifications
+                            ? const CircularProgressIndicator(strokeWidth: 2)
+                            : ElevatedButton(
+                                onPressed: () {
+                                  _fetchNotifications(loadMore: true);
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF388E3C),
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                ),
+                                child: const Text(
+                                  'Load More',
+                                  style: TextStyle(color: Colors.white),
                                 ),
                               ),
-                            )
-                          : Column(
-                              children: _notifications.map((notification) {
-                                final bool isUnread = notification['read'] == false;
-                                return Dismissible(
-                                  key: Key(notification['id'].toString()),
-                                  background: Container(
-                                    color: Colors.green,
-                                    alignment: Alignment.centerLeft,
-                                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                                    child: const Icon(Icons.check, color: Colors.white),
-                                  ),
-                                  direction: DismissDirection.startToEnd,
-                                  onDismissed: (_) {
-                                    _markNotificationAsRead(notification['id'].toString());
-                                  },
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(vertical: 5, horizontal: 0),
-                                    leading: CircleAvatar(
-                                      backgroundColor: isUnread ? Colors.red : Colors.grey,
-                                      child: Icon(
-                                        isUnread ? Icons.notifications_active : Icons.notifications,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    title: Text(
-                                      notification['title'] ?? 'Notification',
-                                      style: TextStyle(
-                                        fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
-                                      ),
-                                    ),
-                                    subtitle: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(notification['message'] ?? ''),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          _formatDateTime(notification['created_at'] ?? ''),
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            fontStyle: FontStyle.italic,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    isThreeLine: true,
-                                    onTap: () {
-                                      _markNotificationAsRead(notification['id'].toString());
-                                    },
-                                  ),
-                                );
-                              }).toList(),
-                            ),
+                      ),
+                    ),
                 ],
               ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

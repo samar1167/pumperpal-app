@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "60700182850",
+    "project_id": "pumperpal-b6d8d",
+    "storage_bucket": "pumperpal-b6d8d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:60700182850:android:daf4a3997f70193a7e20db",
+        "android_client_info": {
+          "package_name": "com.pumperpal.ppal"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBwMviSwJpydW7ZNqanMz-3FZ-iRtb-MMk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
