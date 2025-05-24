@@ -50,16 +50,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Future<void> _initializeStripe() async {
     try {
       Stripe.publishableKey = Config.stripePublishableKey;
-      Stripe.merchantIdentifier = 'merchant.com.your.app'; // For Apple Pay (iOS only)
+      Stripe.merchantIdentifier = 'merchant.com.your.app'; // TODO: For Apple Pay (iOS only)
       await Stripe.instance.applySettings();
 
       setState(() {
         _stripeInitialized = true;
       });
     } catch (e) {
+      print('Stripe initialization error: $e');
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Stripe initialization failed. Error: ${e.toString()}')),
+        SnackBar(content: Text('Oops! There was an error. Please try again later.')),
       );
     }
   }
@@ -90,9 +91,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
       _startPaymentStatusPolling(_currentPaymentIntentId!);
 
     } catch (e) {
+      print('Payment error: $e');
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
+        SnackBar(content: Text('Oops! There was an error. Please try again later.')),
       );
     }
   }

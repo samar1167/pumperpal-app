@@ -9,6 +9,7 @@ import 'package:ppal/services/auth_service.dart';
 import 'package:ppal/common.dart';
 import 'package:ppal/screens/payment_screen.dart';
 import 'package:ppal/screens/login_screen.dart'; // Import LoginScreen
+import 'package:ppal/screens/contact_us_screen.dart';
 
 
 class PlanScreen extends StatefulWidget {
@@ -154,6 +155,14 @@ class _PlanScreenState extends State<PlanScreen> {
         return;
       }
 
+      // Check if plan change is allowed
+      if (_hasSubscription && !_isPlanChangeAllowed(planId)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You cannot downgrade your current subscription.')),
+        );
+        return;
+      }
+
       setState(() {
         _isLoading = true;
       });
@@ -249,8 +258,9 @@ class _PlanScreenState extends State<PlanScreen> {
         }
       }
     } catch (e) {
+      print ('Error subscribing to plan: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+        SnackBar(content: Text('Oops! There was an error. Please try again later.')),
       );
     } finally {
       setState(() {
@@ -322,8 +332,9 @@ class _PlanScreenState extends State<PlanScreen> {
         _loadUserInfo();
       }
     } catch (e) {
+      print ('Error subscribing to Professional plan: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+        SnackBar(content: Text('Oops! There was an error. Please try again later.')),
       );
     } finally {
       setState(() {
@@ -429,7 +440,7 @@ class _PlanScreenState extends State<PlanScreen> {
     }
   }
 
-  // Add this method to _PlanScreenState class
+  // Update this method in your plan_screen.dart
   void _showContactSalesDialog() {
     showDialog(
       context: context,
@@ -482,7 +493,7 @@ class _PlanScreenState extends State<PlanScreen> {
                 const Icon(Icons.phone, size: 16, color: Color(0xFF388E3C)),
                 const SizedBox(width: 8),
                 SelectableText(
-                  '(800) 555-1234',
+                  '(831) 776-8019',
                   style: const TextStyle(fontSize: 14),
                 ),
               ],
@@ -505,13 +516,18 @@ class _PlanScreenState extends State<PlanScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              // Attempt to launch email client
-              final Uri emailLaunchUri = Uri(
-                scheme: 'mailto',
-                path: 'enterprise@pumperpal.com',
-                query: 'subject=Enterprise Plan Inquiry',
+              // Close the dialog
+              Navigator.pop(context);
+              
+              // Navigate to Contact Us page with prefilled Enterprise inquiry
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ContactUsScreen(
+                    prefilledSubject: "Enterprise Plan Inquiry",
+                  ),
+                ),
               );
-              launchUrl(emailLaunchUri);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF388E3C),
@@ -524,6 +540,25 @@ class _PlanScreenState extends State<PlanScreen> {
         ],
       ),
     );
+  }
+
+  // Add this method to _PlanScreenState class
+  bool _isPlanChangeAllowed(String newPlanId) {
+    // If user doesn't have a subscription, they can subscribe to any plan
+    if (_currentPlanId == null) return true;
+    
+    // If current plan is Basic (1) and new plan is Professional (2) or Enterprise (3)
+    if (_currentPlanId == '1' && (newPlanId == '2' || newPlanId == '3')) {
+      return true;
+    }
+    
+    // If current plan is Professional (2) and new plan is Enterprise (3)
+    if (_currentPlanId == '2' && newPlanId == '3') {
+      return true;
+    }
+    
+    // Any other plan change is not allowed (e.g., downgrade)
+    return false;
   }
 
   @override
@@ -569,9 +604,9 @@ class _PlanScreenState extends State<PlanScreen> {
               ),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: IntrinsicHeight( // Add this wrapper
+                child: IntrinsicHeight(
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start, // Align to top
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Icon(
                         Icons.check_circle,
@@ -582,7 +617,7 @@ class _PlanScreenState extends State<PlanScreen> {
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min, // Add this
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             const Text(
                               'You have an active subscription!',
@@ -594,7 +629,9 @@ class _PlanScreenState extends State<PlanScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Your current plan is highlighted below. You can upgrade or change plans anytime.',
+                              _currentPlanId == '2' 
+                                ? 'Your current plan is highlighted below. You can only upgrade to Enterprise, downgrading is not supported.'
+                                : 'Your current plan is highlighted below. You can upgrade or change plans anytime.',
                               style: TextStyle(
                                 fontSize: 14,
                                 color: Colors.grey[700],
@@ -625,134 +662,7 @@ class _PlanScreenState extends State<PlanScreen> {
               color: Color(0xFF333333),
             ),
           ),
-          const SizedBox(height: 24),
-          
-          // Pro plan billing cycle toggle - only show if not on Free plan
-          if (_currentPlanId != '1') 
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Pro Plan Billing:',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Monthly option
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _isYearlyBilling = false;
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                              decoration: BoxDecoration(
-                                color: !_isYearlyBilling ? const Color(0xFFE8F5E9) : Colors.transparent,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: !_isYearlyBilling ? const Color(0xFF388E3C) : Colors.grey.shade300,
-                                ),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  'Monthly',
-                                  style: TextStyle(
-                                    fontWeight: !_isYearlyBilling ? FontWeight.bold : FontWeight.normal,
-                                    color: !_isYearlyBilling ? const Color(0xFF388E3C) : Colors.grey.shade600,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        // Yearly option
-                        Expanded(
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    _isYearlyBilling = true;
-                                  });
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                                  decoration: BoxDecoration(
-                                    color: _isYearlyBilling ? const Color(0xFFE8F5E9) : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: _isYearlyBilling ? const Color(0xFF388E3C) : Colors.grey.shade300,
-                                    ),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      'Yearly',
-                                      style: TextStyle(
-                                        fontWeight: _isYearlyBilling ? FontWeight.bold : FontWeight.normal,
-                                        color: _isYearlyBilling ? const Color(0xFF388E3C) : Colors.grey.shade600,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              if (_isYearlyBilling)
-                                Positioned(
-                                  top: -10,
-                                  right: -10,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF388E3C),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      'Save ${_yearlyDiscountPercent.toStringAsFixed(0)}%',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Center(
-                      child: Text(
-                        _isYearlyBilling 
-                          ? 'Annual billing with ${_yearlyDiscountPercent.toStringAsFixed(0)}% discount' 
-                          : 'Pay monthly with no commitment',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+
           const SizedBox(height: 20),
           
           // Basic Plan
@@ -954,7 +864,7 @@ class _PlanScreenState extends State<PlanScreen> {
                                   ],
                                 ),
                                 Text(
-                                  _monthlyPriceProfessional.toStringAsFixed(2),
+                                  '\$${_monthlyPriceProfessional.toStringAsFixed(2)}',
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
@@ -1096,6 +1006,9 @@ class _PlanScreenState extends State<PlanScreen> {
     bool isPopular = false,
     required String planId,
   }) {
+    // Check if this is a downgrade attempt (from Pro to Basic)
+    bool isDowngrade = _currentPlanId == '2' && planId == '1';
+    
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(
@@ -1267,7 +1180,8 @@ class _PlanScreenState extends State<PlanScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: isCurrentPlan ? null : onSubscribe,
+                    // Disable button if it's current plan OR if it's a downgrade attempt
+                    onPressed: isCurrentPlan || isDowngrade ? null : onSubscribe,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF388E3C),
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1275,15 +1189,17 @@ class _PlanScreenState extends State<PlanScreen> {
                     ),
                     child: Text(
                       isCurrentPlan 
-                          ? 'Current Subscription'
+                        ? 'Current Subscription'
+                        : isDowngrade
+                          ? 'Downgrade Not Allowed'  // New text for downgrade attempts
                           : planId == '3' 
-                              ? 'Contact Sales' 
-                              : _hasSubscription 
-                                  ? 'Switch Plan' 
-                                  : 'Subscribe',
+                            ? 'Contact Sales' 
+                            : _hasSubscription 
+                              ? 'Switch Plan' 
+                              : 'Subscribe',
                       style: TextStyle(
                         fontSize: 16,
-                        color: isCurrentPlan ? Colors.grey[700] : Colors.white,
+                        color: (isCurrentPlan || isDowngrade) ? Colors.grey[700] : Colors.white,
                       ),
                     ),
                   ),

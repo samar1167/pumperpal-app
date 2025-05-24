@@ -87,8 +87,9 @@ class _DeviceListScreenState extends State<DeviceListScreen> {
         });
       }
     } catch (e) {
+      print ('Error fetching devices: $e');
       setState(() {
-        errorMessage = 'Error: $e';
+        errorMessage = 'Oops! There was an error. Please try again later.';
         isLoading = false;
       });
     }

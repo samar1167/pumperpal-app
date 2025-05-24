@@ -80,8 +80,9 @@ class _DeviceDetailsScreenState extends State<DeviceDetailsScreen> {
         });
       }
     } catch (e) {
+      print('Error fetching device details: $e');
       setState(() {
-        deviceErrorMessage = 'Error: $e';
+        deviceErrorMessage = 'Oops! There was an error. Please try again later.';
         isLoadingDevice = false;
       });
     }
@@ -144,8 +145,9 @@ class _DeviceDetailsScreenState extends State<DeviceDetailsScreen> {
         });
       }
     } catch (e) {
+      print('Error fetching device events: $e');
       setState(() {
-        eventsErrorMessage = 'Error: $e';
+        eventsErrorMessage = 'Oops! There was an error. Please try again later.';
         isLoadingEvents = false;
       });
     }

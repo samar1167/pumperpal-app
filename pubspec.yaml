@@ -53,6 +53,10 @@ dependencies:
   firebase_messaging:
 #  flutter_local_notifications:
 
+  path_provider: ^2.1.0
+  flutter_file_dialog: ^3.0.2
+  share_plus: ^7.0.0 #for iOS
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

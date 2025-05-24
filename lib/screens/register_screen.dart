@@ -115,8 +115,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         }
       }
     } catch (e) {
+      print("Error during registration: $e");
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+        SnackBar(content: Text('Oops! There was an error. Please try again later.')),
       );
     } finally {
       setState(() {

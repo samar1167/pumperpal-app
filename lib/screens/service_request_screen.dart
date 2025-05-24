@@ -460,11 +460,12 @@ class _NewServiceRequestScreenState extends State<NewServiceRequestScreen> {
         );
       }
     } catch (e) {
+      print ('Error submitting service request: $e');
       setState(() {
         _isSubmitting = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+        SnackBar(content: Text('Oops! There was an error. Please try again later.')),
       );
     }
   }

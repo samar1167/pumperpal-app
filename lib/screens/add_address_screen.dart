@@ -87,8 +87,9 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
       setState(() {
         _isSubmitting = false;
       });
+      print ('Error adding address: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+        SnackBar(content: Text('Oops! There was an error. Please try again later.')),
       );
     }
   }

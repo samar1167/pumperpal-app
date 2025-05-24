@@ -9,6 +9,11 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_file_dialog/flutter_file_dialog.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:ppal/services/auth_service.dart';
 import 'package:ppal/common.dart';
@@ -47,6 +52,9 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
   String? _selectedRequestType;
   String? _selectedAddress;
   String? _selectedStatus;
+  bool _isDownloading = false;
+  double _downloadProgress = 0;
+  String? _currentDownloadName;
 
   @override
   void initState() {
@@ -75,8 +83,9 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
     try {
       final token = await AuthService.getAuthToken();
       if (token == null) {
+        print('Authentication token missing');
         setState(() {
-          _errorMessage = 'Authentication token missing';
+          _errorMessage = 'Oops! There was an error. Please try again later.';
           _isLoading = false;
         });
         return;
@@ -85,6 +94,7 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
       final baseUrl = Config.backendUrl;
       final apiUrl = '$baseUrl/service_request/${widget.serviceRequestId}/';
 
+      // First: fetch service request details
       final response = await http.get(
         Uri.parse(apiUrl),
         headers: {
@@ -93,38 +103,51 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
         },
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+      // Second: fetch attachments (regardless of first call result)
+      final attachmentsUrl = '$baseUrl/service_request/${widget.serviceRequestId}/attachments/';
+      final attachmentsResponse = await http.get(
+        Uri.parse(attachmentsUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
 
+      if (response.statusCode != 200 || attachmentsResponse.statusCode != 200) {
+        print('Failed to load service request details or attachments: ${response.reasonPhrase}');
         setState(() {
-          _serviceRequestDetails = data;
-
-          // Extract service notes if available
-          if (data.containsKey('notes') && data['notes'] is List) {
-            _serviceNotes = List<Map<String, dynamic>>.from(data['notes']);
-          } else if (data.containsKey('service_notes') &&
-              data['service_notes'] is List) {
-            _serviceNotes =
-            List<Map<String, dynamic>>.from(data['service_notes']);
-          }
-
-          // Extract attachments if available
-          if (data.containsKey('attachments') && data['attachments'] is List) {
-            _attachments = List<Map<String, dynamic>>.from(data['attachments']);
-          }
-
+          _errorMessage = 'Oops! There was an error. Please try again later.';
           _isLoading = false;
         });
-      } else {
-        setState(() {
-          _errorMessage =
-          'Failed to load service request details: ${response.reasonPhrase}';
-          _isLoading = false;
-        });
+        return;
       }
-    } catch (e) {
       setState(() {
-        _errorMessage = 'Error: $e';
+        final data = jsonDecode(response.body);
+        _serviceRequestDetails = data;
+
+        // Extract service notes if available
+        if (data.containsKey('notes') && data['notes'] is List) {
+          _serviceNotes = List<Map<String, dynamic>>.from(data['notes']);
+        } else if (data.containsKey('service_notes') &&
+            data['service_notes'] is List) {
+          _serviceNotes =
+          List<Map<String, dynamic>>.from(data['service_notes']);
+        }
+
+        // Extract attachments from the attachments API response
+        if (attachmentsResponse.body.isNotEmpty) {
+          final attachmentsData = jsonDecode(attachmentsResponse.body);
+          if (attachmentsData is List) {
+            _attachments = List<Map<String, dynamic>>.from(attachmentsData);
+          }
+        }
+
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error: $e');
+      setState(() {
+        _errorMessage = 'Oops! There was an error. Please try again later.';
         _isLoading = false;
       });
     }
@@ -366,8 +389,7 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
       }
 
       final baseUrl = Config.backendUrl;
-      final apiUrl = '$baseUrl/service_request/${widget
-          .serviceRequestId}/upload/';
+      final apiUrl = '$baseUrl/service_request/${widget.serviceRequestId}/upload/';
 
       // Create multipart request
       final request = http.MultipartRequest('POST', Uri.parse(apiUrl));
@@ -391,20 +413,19 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
         contentType = 'application/octet-stream';
       }
 
-      // Add file to request
       final fileStream = http.ByteStream(file.openRead());
       final fileLength = await file.length();
       final multipartFile = http.MultipartFile(
-        'file', // Field name expected by your API
+        'files',
         fileStream,
         fileLength,
         filename: fileName,
         contentType: MediaType.parse(contentType),
       );
 
-      // Add service request ID if needed
+      // Add service request ID
       request.fields['service_request'] = widget.serviceRequestId;
-
+      
       request.files.add(multipartFile);
 
       // Send request
@@ -418,8 +439,7 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
         return true;
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(
-              'Failed to upload attachment: ${response.reasonPhrase}')),
+          SnackBar(content: Text('Failed to upload attachment: ${response.reasonPhrase} (${response.statusCode})')),
         );
         return false;
       }
@@ -428,6 +448,110 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
         SnackBar(content: Text('Error uploading attachment: $e')),
       );
       return false;
+    }
+  }
+
+  Future<void> _downloadFile(String attachmentId, String fileName) async {
+    setState(() {
+      _isDownloading = true;
+      _downloadProgress = 0;
+    });
+
+    final client = http.Client();
+    
+    try {
+      // Request storage permission
+      if (Platform.isAndroid) {
+        final status = await Permission.storage.request();
+        if (status.isDenied) {
+          throw Exception('Storage permission is required to download files');
+        }
+      }
+      
+      // Get auth token
+      final token = await AuthService.getAuthToken();
+      if (token == null) {
+        throw Exception('Authentication token missing');
+      }
+      
+      // Create temporary file path
+      final tempDir = await getTemporaryDirectory();
+      final tempFilePath = '${tempDir.path}/$fileName';
+      final file = File(tempFilePath);
+      
+      // Use dedicated download endpoint instead of direct file URL
+      final baseUrl = Config.backendUrl;
+      final downloadUrl = '$baseUrl/service_request/${widget.serviceRequestId}/attachments/$attachmentId/download/';
+      
+      // Prepare the HTTP client with auth header
+      final request = http.Request('GET', Uri.parse(downloadUrl));
+      request.headers['Authorization'] = 'Bearer $token';
+      
+      // Get response stream
+      final response = await client.send(request);
+      
+      if (response.statusCode != 200) {
+        throw Exception('Failed to download file: ${response.reasonPhrase}');
+      }
+      
+      // Get total file size
+      final totalBytes = response.contentLength ?? 0;
+      int receivedBytes = 0;
+      
+      // Open file for writing
+      final fileStream = file.openWrite();
+      
+      // Download with progress
+      await response.stream.forEach((chunk) {
+        fileStream.add(chunk);
+        receivedBytes += chunk.length;
+        
+        if (totalBytes > 0) {
+          final progress = receivedBytes / totalBytes;
+          setState(() {
+            _downloadProgress = progress;
+          });
+        }
+      });
+      
+      // Close the file
+      await fileStream.flush();
+      await fileStream.close();
+      
+      // Save the file to device storage
+      if (Platform.isAndroid) {
+        final params = SaveFileDialogParams(
+          sourceFilePath: tempFilePath,
+          fileName: fileName,
+        );
+        final filePath = await FlutterFileDialog.saveFile(params: params);
+        
+        if (filePath == null) {
+          throw Exception('File save canceled');
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('File saved to: $filePath')),
+        );
+      } else if (Platform.isIOS) {
+        // For iOS, we'll use share_plus package
+        // This will open the share sheet so the user can decide where to save the file
+        await Share.shareXFiles(
+          [XFile(tempFilePath)],
+          text: 'Sharing $fileName',
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error downloading file: $e')),
+      );
+    } finally {
+      setState(() {
+        _isDownloading = false;
+      });
+      
+      // Close any remaining streams
+      client.close();
     }
   }
 
@@ -448,9 +572,10 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
           style: const TextStyle(color: Colors.white),
         ),
         backgroundColor: const Color(0xFF388E3C),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: _fetchServiceRequestDetails,
             tooltip: 'Refresh',
           ),
@@ -997,7 +1122,7 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
                                     status.toLowerCase()))
                                   ElevatedButton.icon(
                                     onPressed: _showAddNoteDialog,
-                                    icon: const Icon(Icons.add),
+                                    icon: const Icon(Icons.add, color: Colors.white),
                                     label: const Text(
                                       'Add First Note',
                                       style: TextStyle(color: Colors.white),
@@ -1079,38 +1204,33 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Header with improved layout
+                      // Header with improved layout and + icon
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Expanded(
-                            child: Text(
-                              'Attachments',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF2E7D32),
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                          const Text(
+                            'Attachments',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF2E7D32),
                             ),
                           ),
                           // Only show attach button if not cancelled or completed
-                          if (!['cancelled', 'completed'].contains(
-                              status.toLowerCase()))
-                            _isLoading || _isUploadingAttachment
+                          if (!['cancelled', 'completed'].contains(status.toLowerCase()))
+                            _isUploadingAttachment
                                 ? const SizedBox(
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                    Color(0xFF388E3C)),
+                                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF388E3C)),
                               ),
                             )
                                 : IconButton(
-                              icon: const Icon(Icons.attach_file),
+                              icon: const Icon(Icons.add_circle_outline),
                               onPressed: _pickAndUploadFile,
-                              tooltip: 'Attach File',
+                              tooltip: 'Add Attachment',
                               color: const Color(0xFF388E3C),
                             ),
                         ],
@@ -1124,22 +1244,25 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
                             padding: const EdgeInsets.symmetric(vertical: 16.0),
                             child: Column(
                               children: [
-                                const Text('No attachments available'),
+                                const Icon(
+                                  Icons.attach_file,
+                                  size: 48,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'No attachments available',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
                                 const SizedBox(height: 16),
                                 // Only show add attachment button if not cancelled or completed
-                                if (!['cancelled', 'completed'].contains(
-                                    status.toLowerCase()))
-                                  ElevatedButton.icon(
-                                    onPressed: _isUploadingAttachment
-                                        ? null
-                                        : _pickAndUploadFile,
-                                    icon: const Icon(Icons.attach_file),
+                                if (!['cancelled', 'completed'].contains(status.toLowerCase()))
+                                  TextButton.icon(
+                                    onPressed: _isUploadingAttachment ? null : _pickAndUploadFile,
+                                    icon: const Icon(Icons.add_circle_outline, color: Color(0xFF388E3C)),
                                     label: const Text(
-                                      'Add Attachment',
-                                      style: TextStyle(color: Colors.white),
-                                    ),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF388E3C),
+                                      'Add First Attachment',
+                                      style: TextStyle(color: Color(0xFF388E3C)),
                                     ),
                                   ),
                               ],
@@ -1154,8 +1277,8 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
                           itemCount: _attachments.length,
                           itemBuilder: (context, index) {
                             final attachment = _attachments[index];
-                            final fileName = attachment['file_name'] ??
-                                attachment['name'] ??
+                            final fileName = attachment['filename'] ??
+                                attachment['filename'] ??
                                 'Attachment ${index + 1}';
                             final fileUrl = attachment['file_url'] ??
                                 attachment['url'];
@@ -1176,57 +1299,61 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
 
                             return ListTile(
                               contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 8.0,
-                                  vertical: 4.0
+                                horizontal: 8.0,
+                                vertical: 4.0
                               ),
-                              leading: Icon(
-                                  iconData, color: const Color(0xFF388E3C)),
+                              leading: Icon(iconData, color: const Color(0xFF388E3C)),
                               title: Text(
                                 fileName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              subtitle: Text(
-                                'Added: ${_formatDateTime(
-                                    attachment['created_at']?.toString() ??
-                                        '')}',
-                                style: const TextStyle(fontSize: 12),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Uploaded by ${attachment['uploaded_by']} on: ${_formatDateTime(
+                                        attachment['created_at']?.toString() ??
+                                            '')} * Size: ${_formatFileSize(attachment['size'])}',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  
+                                  // Show download progress if this file is being downloaded
+                                  if (_isDownloading && _currentDownloadName == fileName)
+                                    LinearProgressIndicator(
+                                      value: _downloadProgress,
+                                      backgroundColor: Colors.grey[300],
+                                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF388E3C)),
+                                    ),
+                                ],
                               ),
-                              trailing: const Icon(Icons.download, size: 20),
+                              trailing: _isDownloading && _currentDownloadName == fileName
+                                ? const CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF388E3C)),
+                                    strokeWidth: 2,
+                                  )
+                                : const Icon(Icons.download, size: 20),
                               onTap: () {
-                                if (fileUrl != null) {
-                                  _launchURL(fileUrl);
+                                if (_isDownloading) {
+                                  // Don't allow multiple simultaneous downloads
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('A download is already in progress')),
+                                  );
+                                  return;
+                                }
+                                
+                                final attachmentId = attachment['id']?.toString();
+                                if (attachmentId != null) {
+                                  setState(() => _currentDownloadName = fileName);
+                                  _downloadFile(attachmentId, fileName);
                                 } else {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text(
-                                        'File URL not available')),
+                                    const SnackBar(content: Text('Attachment ID not available')),
                                   );
                                 }
                               },
                             );
                           },
-                        ),
-
-                      // Add Attachment button at bottom for non-empty lists
-                      if (_attachments.isNotEmpty &&
-                          !['cancelled', 'completed'].contains(
-                              status.toLowerCase()))
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8.0),
-                          child: Center(
-                            child: OutlinedButton.icon(
-                              onPressed: _isUploadingAttachment
-                                  ? null
-                                  : _pickAndUploadFile,
-                              icon: const Icon(Icons.attach_file, size: 16),
-                              label: const Text('Add Attachment'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFF388E3C),
-                                side: const BorderSide(
-                                    color: Color(0xFF388E3C)),
-                              ),
-                            ),
-                          ),
                         ),
                     ],
                   ),
@@ -1513,9 +1640,10 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
                       } catch (e) {
                         // Show error if something went wrong
                         if (context.mounted) {
+                          print ('Error cancelling request: $e');
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('Error cancelling request: $e'),
+                              content: Text('Oops! There was an error. Please try again later.'),
                               backgroundColor: Colors.red,
                             ),
                           );
@@ -1612,5 +1740,50 @@ class _ServiceRequestDetailsScreenState extends State<ServiceRequestDetailsScree
         Navigator.of(context).pop(true);
       }
     });
+  }
+}
+
+String _formatFileSize(dynamic size) {
+  // Handle null values
+  if (size == null) return 'Unknown size';
+  
+  // Convert to bytes
+  double bytes;
+  if (size is int) {
+    bytes = size.toDouble();
+  } else if (size is double) {
+    bytes = size;
+  } else if (size is String) {
+    try {
+      bytes = double.parse(size);
+    } catch (e) {
+      return size.toString();
+    }
+  } else {
+    return 'Unknown size';
+  }
+  
+  // Format based on size
+  const suffixes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  int i = 0;
+  
+  while (bytes >= 1024 && i < suffixes.length - 1) {
+    bytes /= 1024;
+    i++;
+  }
+  
+  // Format with appropriate decimal places
+  if (i == 0) {
+    // For bytes, no decimal places
+    return '${bytes.round()} ${suffixes[i]}';
+  } else if (bytes >= 100) {
+    // For larger numbers, no decimal places
+    return '${bytes.round()} ${suffixes[i]}';
+  } else if (bytes >= 10) {
+    // For medium numbers, one decimal place
+    return '${bytes.toStringAsFixed(1)} ${suffixes[i]}';
+  } else {
+    // For small numbers, two decimal places
+    return '${bytes.toStringAsFixed(2)} ${suffixes[i]}';
   }
 }
