@@ -1,9 +1,16 @@
 workflows:
-
-    sample-workflow:
-
-        name: Codemagic Sample Workflow
-
-        max_build_duration: 120
-
-        instance_type: mac_mini_m2
+  ios-test:
+    name: iOS Test Build
+    environment:
+      flutter: stable
+      xcode: latest
+    scripts:
+      - flutter pub get
+      - flutter build ios --debug --no-codesign  # Debug build for testing
+    artifacts:
+      - build/ios/iphoneos/Runner.app  # Debug app for simulator
+      - build/ios/ipa/Runner.ipa       # Ad-hoc build for real devices
+    publishing:
+      email:
+        recipients:
+          - samar1167@gmail.com  # Get build notifications
