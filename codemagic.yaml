@@ -6,7 +6,10 @@ workflows:
       xcode: latest
     scripts:
       - flutter pub get
-      - flutter build ios --debug --no-codesign  # Debug build for testing
+      - flutter build ios --release --no-codesign
+      - xcodebuild -workspace Runner.xcworkspace -scheme Runner -sdk iphoneos -configuration Release ARCHS=arm64 ONLY_ACTIVE_ARCH=NO IPHONEOS_DEPLOYMENT_TARGET=13.0
+      - xcrun simctl create "iPhone 8 iOS13" com.apple.CoreSimulator.SimDeviceType.iPhone-8 com.apple.CoreSimulator.SimRuntime.iOS-13-7
+      - flutter run -d <simulator_id> --release
     artifacts:
       - build/ios/iphoneos/Runner.app  # Debug app for simulator
       - build/ios/ipa/Runner.ipa       # Ad-hoc build for real devices
